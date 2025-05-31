@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
+const { v4: uuidv4 } = require('uuid'); // UUID untuk Ticket ID
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const sessions = {};
@@ -8,26 +9,6 @@ const sessions = {};
 // Regex pattern
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^01[0-9]{8,9}$/; // Malaysia 10-11 digit format
-
-const ticketCounter = {}; // Simpan kiraan berdasarkan tarikh
-
-function generateTicketID() {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  const dateStr = `${yyyy}${mm}${dd}`;
-
-  if (!ticketCounter[dateStr]) {
-    ticketCounter[dateStr] = 1;
-  } else {
-    ticketCounter[dateStr]++;
-  }
-
-  const count = String(ticketCounter[dateStr]).padStart(3, '0');
-  return `TPA-${dateStr}-${count}`;
-}
-
 
 bot.start((ctx) => {
   const chatId = ctx.chat.id;
@@ -38,6 +19,7 @@ bot.start((ctx) => {
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
   const text = ctx.message.text.trim();
+
   if (!sessions[chatId]) {
     sessions[chatId] = { step: 1 };
     return ctx.reply('Sila mula semula dengan taip /start');
@@ -80,8 +62,7 @@ bot.on('text', async (ctx) => {
     session.masalah = text;
 
     try {
-      // Guna axios GET untuk elak CORS
-      const ticketID = generateTicketID();
+      const ticketID = `TPA-${uuidv4()}`; // Gunakan UUID v4
 
       await axios.get(process.env.GAS_URL, {
         params: {
@@ -89,12 +70,11 @@ bot.on('text', async (ctx) => {
           emel: session.emel,
           telefon: session.telefon,
           masalah: session.masalah,
-          ticketID: ticketID // ← hantar ticketID ke Google Sheet
+          ticketID: ticketID
         }
       });
-      
+
       ctx.reply(`🎉 Tiket anda telah dihantar!\n\n🆔 Ticket ID: *${ticketID}*\n\nKami akan hubungi anda secepat mungkin.`, { parse_mode: 'Markdown' });
-      
       delete sessions[chatId];
     } catch (error) {
       console.error('Error:', error);
